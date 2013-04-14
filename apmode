@@ -1,0 +1,301 @@
+#!/bin/bash
+
+
+default_config()
+{
+	echo "using default configure!";
+
+	cat > "rtl_test.conf" <<EOF
+interface=wlan0
+driver=rtl871xdrv
+ctrl_interface=/var/run/hostapd
+ctrl_interface_group=0
+ssid=rtwap
+hw_mode=g
+channel=6
+beacon_int=100
+supported_rates=10 20 55 110 60 90 120 180 240 360 480 540
+basic_rates=10 20 55 110
+preamble=1
+macaddr_acl=0
+auth_algs=3
+EOF
+
+	exit 0
+}
+
+wmm_enable_config()
+{
+	cat >> "rtl_test.conf" <<EOF
+
+${wme_enabled:+wme_enabled=$wme_enabled}
+wme_ac_bk_cwmin=4
+wme_ac_bk_cwmax=10
+wme_ac_bk_aifs=7
+wme_ac_bk_txop_limit=0
+wme_ac_bk_acm=0
+
+wme_ac_be_aifs=3
+wme_ac_be_cwmin=4
+wme_ac_be_cwmax=10
+wme_ac_be_txop_limit=0
+wme_ac_be_acm=0
+
+wme_ac_vi_aifs=2
+wme_ac_vi_cwmin=3
+wme_ac_vi_cwmax=4
+wme_ac_vi_txop_limit=94
+wme_ac_vi_acm=0
+
+wme_ac_vo_aifs=2
+wme_ac_vo_cwmin=2
+wme_ac_vo_cwmax=3
+wme_ac_vo_txop_limit=47
+wme_ac_vo_acm=0
+
+EOF
+	
+
+}
+
+config()
+{
+	local config="1"
+	local hwmode="g"	
+	local channel="6"
+	local wme_enabled="0"
+	local ieee80211n="0"
+	local ssid="rtwap"
+	local sec_mode="open"
+	local wpa="0"
+	local wpa_passphrase="12345678"
+			
+	
+	#
+	echo "use default config file or define new config file(1/2);"
+	select config in default_config new_config
+	do
+		if [ "$config" != "new_config" ]; then		
+				default_config
+				break
+		fi				
+		break
+	done
+	
+	
+	echo
+	echo "--- please follow up below instructions to create new config file ---"
+	echo
+
+	#Select HW Mode
+	echo "Please select HW Mode(1/2/3):"
+	select mode_input in b g n
+	do		
+		echo "You have selected HW Mode:$hwmode"
+			
+		if [ "$mode_input" == "n" ]; then	
+		    hwmode="g"
+				ieee80211n="1"				
+		else
+			  hwmode="$mode_input"
+		fi			
+		
+		break
+	done
+
+	#Select Channel
+	echo "Please input channel (1~13):";
+	while read ch_input
+	do
+	
+		if [ -z "$ch_input" ]; then
+		  channel="6"
+		else  
+		  channel="$ch_input"
+		fi
+
+		echo "You have selected channel:$channel"
+		break
+	done
+
+	#Set SSID
+	echo "Please Set SSID:";
+	while read ssid_input
+	do	
+		if [ -z "$ssid_input" ]; then
+		  ssid="rtwap"
+		else  
+		  ssid="$ssid_input"
+		fi
+
+		echo "You have set ssid:$ssid_input"
+		break
+	done
+
+	#Select security mode
+	echo "Please select security mode(1/2/3/4):";
+	select sec_mode in open wep wpa wpa2
+	do		
+		echo "You have selected security mode:$sec_mode"
+		
+		if [ "$sec_mode" == "open" ]; then	
+		   wpa="0"
+		   break;
+		fi			
+
+    if [ "$sec_mode" == "wep" ]; then	
+		   wpa="0"
+		   break;
+		else
+		
+			if [ "$sec_mode" == "wpa" ]; then
+					wpa="1"
+			fi	
+		
+			if [ "$sec_mode" == "wpa2" ]; then
+					wpa="2"
+			fi		
+			
+			echo "Please enter the key:";
+			while read key_input
+			do	
+				if [ -z "$key_input" ]; then
+		  		wpa_passphrase="12345678"
+				else  
+		  		wpa_passphrase="$key_input"
+				fi
+
+			echo "You have enter the key:$wpa_passphrase"
+			
+			break
+			done		   
+		fi	
+		
+		
+		break
+	done
+
+	
+	cat > "rtl_test.conf" <<EOF
+interface=wlan0
+driver=rtl871xdrv
+ctrl_interface=/var/run/hostapd
+ctrl_interface_group=0
+${ssid:+ssid=$ssid}
+${hwmode:+hw_mode=$hwmode}
+${channel:+channel=$channel}
+beacon_int=100
+supported_rates=10 20 55 110 60 90 120 180 240 360 480 540
+basic_rates=10 20 55 110
+preamble=1
+macaddr_acl=0
+auth_algs=3
+
+EOF
+
+if [ "$wme_enabled" == "1" ]; then			
+	wmm_enable_config	
+fi
+
+
+if [ "$sec_mode" == "wep" ]; then	
+		   	cat >> "rtl_test.conf" <<EOF
+wep_default_key=0
+wep_key0=123456789a
+wep_key1="vwxyz"
+wep_key2=0102030405060708090a0b0c0d
+wep_key3=".2.4.6.8.0.23"
+
+EOF
+fi			
+
+
+	cat >> "rtl_test.conf" <<EOF	
+${wpa:+wpa=$wpa}
+EOF
+
+if [ "$wpa" == "1" ]; then
+	cat >> "rtl_test.conf" <<EOF
+${wpa_passphrase:+wpa_passphrase=$wpa_passphrase}
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+EOF
+fi
+
+if [ "$wpa" == "2" ]; then
+	cat >> "rtl_test.conf" <<EOF
+${wpa_passphrase:+wpa_passphrase=$wpa_passphrase}
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=CCMP
+EOF
+fi
+
+
+#wpa=2
+#wpa_psk=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+#wpa_passphrase=87654321
+#wpa_key_mgmt=WPA-PSK
+#wpa_pairwise=TKIP CCMP
+#rsn_pairwise=CCMP
+
+
+if [ "$ieee80211n" == "1" ]; then
+	if [ "$wme_enabled" != "1" ]; then	
+		wme_enabled="1"
+		wmm_enable_config	
+	fi
+	
+	if [ $channel -lt 6 ]; then			
+			HT_CH_EXT="[HT40+]"
+	else
+			HT_CH_EXT="[HT40-]"
+	fi
+		
+	cat >> "rtl_test.conf" <<EOF	
+${ieee80211n:+ieee80211n=$ieee80211n}
+ht_capab=$HT_CH_EXT[SHORT-GI-20][SHORT-GI-40]
+
+EOF
+	
+fi			
+
+}
+
+stop()
+{
+	echo -n "Stopping hostapd daemon: "	
+ 	[ -f /var/run/hostapd.pid ] && kill `cat /var/run/hostapd.pid`
+
+}
+
+start()
+{
+
+	echo -n "Starting hostapd daemon: "
+	echo
+	./hostapd rtl_hostapd.conf -P /var/run/hostapd.pid -B
+
+}
+
+
+case "$1" in
+	config)
+		config
+	;;
+	start)
+		start
+	;;
+	restart)
+		stop
+		start
+	;;
+	stop)
+		stop
+	;;
+	*)
+	echo "usage: $0 {config|start|stop|restart}"
+	exit 1
+	;;	
+esac
+	
+exit 0
